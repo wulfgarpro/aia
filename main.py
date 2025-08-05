@@ -2,13 +2,50 @@ import argparse
 import os
 from dotenv import load_dotenv
 from google import genai
-from functions import get_files_info
+from functions import get_file_content, get_files_info, run_python_file, write_file
 from google.genai import types
 
 from prompts import system_prompt
 from call_function import available_functions
 
-function_call_map = {"get_files_info": get_files_info}
+function_call_map = {
+    "get_files_info": get_files_info.get_files_info,
+    "get_file_content": get_file_content.get_file_content,
+    "run_python_file": run_python_file.run_python_file,
+    "write_file": write_file.write_file,
+}
+
+
+def call_function(function_call_part, verbose=False):
+    function_name = function_call_part.name
+
+    if verbose:
+        print(f"Calling function: {function_name}({function_call_part.args})")
+
+    function_call = function_call_map.get(function_name)
+    if not function_call:
+        return types.Content(
+            role="tool",
+            parts=[
+                types.Part.from_function_response(
+                    name=function_name,
+                    response={"error": f"Unknown function: {function_name}"},
+                )
+            ],
+        )
+    else:
+        function_result = function_call("calculator", **function_call_part.args)
+        return types.Content(
+            role="tool",
+            parts=[
+                types.Part.from_function_response(
+                    name=function_name,
+                    # `from_function_response` requires the response to be a
+                    # dictionary, so we assign the result to a "result" field.
+                    response={"result": function_result},
+                )
+            ],
+        )
 
 
 def main():
@@ -18,7 +55,7 @@ def main():
         prog="aia",
     )
     parser.add_argument("user_prompt")
-    parser.add_argument("-v", "--verbose", action="store_false")
+    parser.add_argument("-v", "--verbose", action="store_true")
 
     args = parser.parse_args()
 
@@ -43,16 +80,16 @@ def main():
         print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
         print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
 
-    if not response.function_calls:
+    if response.function_calls:
+        for function_call_part in response.function_calls:
+            function_call_result = call_function(function_call_part, args.verbose)
+            function_response = function_call_result.parts[0].function_response.response
+            if function_response:
+                print(f"-> {function_response}")
+            else:
+                raise Exception("Error calling function - no function response.")
+    else:
         print(response.text)
-
-    for function_call_part in response.function_calls:
-        if args.verbose:
-            print(
-                f"Calling function: {function_call_part.name}({function_call_part.args})"
-            )
-        else:
-            print(f"Calling function: {function_call_part.name}")
 
 
 if __name__ == "__main__":
