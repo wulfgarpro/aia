@@ -24,11 +24,11 @@ function_call_map = {
 }
 
 
-def call_function(function_call_part, verbose=False):
+def call_function(function_call_part, verbose=True):
     function_name = function_call_part.name
 
-    if verbose:
-        print(f"Calling function: {function_name}({function_call_part.args})")
+    # if verbose:
+    print(f"Calling function: {function_name}({function_call_part.args})")
 
     if function_name not in function_call_map:
         return types.Content(
